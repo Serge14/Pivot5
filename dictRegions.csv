@@ -1,0 +1,62 @@
+Region,Region.channel,Channel
+West,Львовская область,PHARMA
+West,Львівська область,PHARMA
+West,Тернопольская область,PHARMA
+West,Тернопільська область,PHARMA
+West,Закарпатская область,PHARMA
+West,Закарпатська область,PHARMA
+West,Ивано-франковская область,PHARMA
+West,Івано-Франківська область,PHARMA
+West,Ровенская область,PHARMA
+West,Рiвенська область,PHARMA
+West,Хмельницкая область,PHARMA
+West,Хмельницька область,PHARMA
+West,Волынская область,PHARMA
+West,Волинська область,PHARMA
+West,Черновицкая область,PHARMA
+West,Чернівецька область,PHARMA
+East,Харьковская область,PHARMA
+East,Харківська область,PHARMA
+East,Донецкая область,PHARMA
+East,Донецька область,PHARMA
+East,Луганская область,PHARMA
+East,Луганська область,PHARMA
+East,Полтавская область,PHARMA
+East,Полтавська область,PHARMA
+East,Запорожская область,PHARMA
+East,Запорізька область,PHARMA
+East,Днепропетровская область,PHARMA
+East,Дніпропетровська область,PHARMA
+East,Сумская область,PHARMA
+East,Сумська область,PHARMA
+Center,Житомирская область,PHARMA
+Center,Житомирська область,PHARMA
+Center,Винницкая область,PHARMA
+Center,Вінницька область,PHARMA
+Center,Киевская область,PHARMA
+Center,Київська область,PHARMA
+Center,Черкасская область,PHARMA
+Center,Черкаська область,PHARMA
+Center,Кировоградская область,PHARMA
+Center,Кіровоградська область,PHARMA
+Center,Киев,PHARMA
+Center,Київ,PHARMA
+Center,Киев и район,PHARMA
+Center,Київ і район,PHARMA
+Center,Черниговская область,PHARMA
+Center,Чернігівська область,PHARMA
+South,Республика Крым,PHARMA
+South,Республіка Крим,PHARMA
+South,Херсонская область,PHARMA
+South,Херсонська область,PHARMA
+South,Одесская область,PHARMA
+South,Одеська область,PHARMA
+South,Николаевская область,PHARMA
+South,Миколаївська область,PHARMA
+Center,KYIV RA&OM,MT
+Center,CENTER RA&OM,MT
+East,NORTH-EAST RA&OM,MT
+East,SOUTH-EAST RA&OM,MT
+East,EAST RA&OM,MT
+South,SOUTH RA&OM,MT
+West,WEST RA&OM,MT
