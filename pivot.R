@@ -3,46 +3,76 @@ library(stringi)
 # library(disk.frame)
 
 source("functions.R")
+source("dictionaries.R")
 
-# df.p = csv_to_disk.frame("/home/serhii/Documents/Work/Nutricia/Data/BF_PH_2015-2021M1.csv",
-#                          outdir = "tmpdf", overwrite = TRUE,
-#                          in_chunk_size = 100000)
+# Proxima
 
 df.p  = fread("/home/serhii/Documents/Work/Nutricia/Data/BF_PH_2015-2020M12.csv")
 df.p[, SKU := NULL]
-df.temp = fread("/home/serhii/Documents/Work/Nutricia/Data/BF_PH_2021M2.csv")
+df.temp = fread("/home/serhii/Documents/Work/Nutricia/Data/BF_PH_2021M6.csv")
 df.temp[, SKU := NULL]
 df.p = rbindlist(list(df.p, df.temp))
 rm(df.temp)
 
+df.p[, OPMP := 1]
+df.p[dictOPMP.pharma,
+   on = c("ID.morion", "SKU2", "Ynb", "Mnb", "Region.pharma"),
+   OPMP := i.opmp]
 
-df.ec = fread("/home/serhii/Documents/Work/Nutricia/Data/N_EC_2018-2020M12.csv")
-df.ec.op = fread("/home/serhii/Documents/Work/Nutricia/Data/df.ec.op.csv")
-df.n = fread("/home/serhii/Documents/Work/Nutricia/Data/N_MT_2015-2021M1.csv")
-df.amn = fread("/home/serhii/Documents/Work/Nutricia/Data/AMN_PH_2015-2021M1.csv")
-df.sku.proxima = fread("/home/serhii/Documents/Work/Nutricia/Data/Dictionaries/df.sku.proxima.csv")
-df.sku.nielsen = fread("/home/serhii/Documents/Work/Nutricia/Data/Dictionaries/df.sku.nielsen.csv")
-df.matrix = fread("/home/serhii/Documents/Work/Nutricia/Data/Dictionaries/df.sku.matrix.csv")
-dictRegions = fread("/home/serhii/Documents/Work/Nutricia/Scripts/Pivot4/dictRegions.csv")
-dictEC = fread("/home/serhii/Documents/Work/Nutricia/Scripts/Pivot4/dictEC.csv")
-dictAC = fread("/home/serhii/Documents/Work/Nutricia/Scripts/Pivot4/dictAC.csv")
-dict.price.segments = fread("/home/serhii/Documents/Work/Nutricia/Scripts/Pivot4/PriceSegments.csv")
-dictScent = fread("/home/serhii/Documents/Work/Nutricia/Scripts/Pivot4/dictScents.csv")
+df.p[, Items := Items * OPMP]
+
+
+# AMN
+
+df.amn = fread("/home/serhii/Documents/Work/Nutricia/Data/AMN_PH_2015-2021M6.csv")
+df.amn[, OPMP := 1]
+df.amn[dictOPMP.amn,
+       on = c("ID.morion", "SKU2", "Ynb", "Mnb", "Region.pharma"),
+       OPMP := i.opmp]
+
+df.amn[, Items := Items * OPMP]
+
+# Nilesen
+
+df.n = fread("/home/serhii/Documents/Work/Nutricia/Data/N_MT_2015-2021M6.csv")
+
+df.n[, OPMP := 1]
+df.n[dictOPMP.mt,
+     on = c("SKU2", "Region.nielsen", "Ynb", "Mnb"),
+     OPMP := i.opmp]
+
+df.n[, Volume := Volume * OPMP]
+df.n[, OPMP := NULL]
+
+# E-com
+
+df.ec = fread("/home/serhii/Documents/Work/Nutricia/Data/N_EC_2018-2021M6.csv")
+path.to.1st.period = "/home/serhii/Documents/Work/Nutricia/Data/N_EC_2018M1.csv"
+df.ec = generate.ecom.pivot(df.ec, path.to.1st.period)
+
+
+
+# Secondary sales
+
+df.ss = fread("/home/serhii/Documents/Work/Nutricia/Data/202106/df.ss.csv")
 
 
 ### Check periods, select the same range of data
 
 min.year = max(df.n[, min(Ynb)],
                df.p[, min(Ynb)],
-               df.amn[, min(Ynb)])
+               df.amn[, min(Ynb)],
+               df.ec[, min(Ynb)]
+            )
 
 # Select same range
 df.n = df.n[Ynb >= min.year]
 df.p = df.p[Ynb >= min.year]
 df.amn = df.amn[Ynb >= min.year]
+df.ec = df.ec[Ynb >= min.year]
 
 # Check if all files have all periods
-periods.equal = check.periods.equal(df.n, df.p, df.amn)
+periods.equal = check.periods.equal(df.n, df.p, df.amn, df.ec)
 
 if (periods.equal != TRUE) {
    print("Datasets contain different number of periods, check datasets")}
@@ -51,11 +81,6 @@ if (periods.equal != TRUE) {
 
 # Matrix
 df.matrix[, SKU2 := SKU]
-# df.matrix[SKU2 == "OTHER ITEMS PRIVATE LABEL", SKU2 := paste(SKU2, DANONE.SUB.SEGMENT)]
-
-# Nielsen
-# df.n[SKU2 == "OTHER ITEMS PRIVATE LABEL", SKU2 := paste(SKU2, DANONE.SUB.SEGMENT)]
-# df.n = df.n[, .(SKU2, Region, Ynb, Mnb, Volume, Value)]
 
 # Convert regions
 
@@ -100,8 +125,6 @@ df.p = rbindlist(list(df.p, df.amn), use.names = TRUE)
 
 df.p[df.sku.proxima, on = c("ID.morion", "SKU2"), ID := i.ID]
 df.p[is.na(ID) | ID == "", .N]
-# df.p[ID == -1, .N]
-# df.p[ID == -1, unique(SKU2)]
 
 df.p = df.p[ID > 0]
 
@@ -129,18 +152,11 @@ df.p = df.p[df.matrix, on = "ID",
 
 df.p[, c("SKU2", "ID.morion") := NULL]
 
-# df.p = df.p[!is.na(Brand)]
-# df.n = df.n[!is.na(Brand)]
-
 calculate.volume(df.p)
 
 df.p[, Items := NULL]
 
 # Convert regions
-
-# ECOM
-# names(df.n)[1] = "Channel"
-# df.n[, Region := Channel]
 
 df.n[dictRegions[Channel == "MT"], 
      on = c(Region.nielsen = "Region.channel"),
@@ -161,13 +177,12 @@ df.p[, "Region.pharma" := NULL]
 
 df.n[, Channel := "MT"]
 df.p[, Channel := "PHARMA"]
+df.ec[, Channel := "OTHERS"]
 
 all(names(df.n) %in% names(df.p))
+all(names(df.ec) %in% names(df.p))
 
-df = rbindlist(list(df.p, df.n), use.names = TRUE)
-
-# ECOM
-# df = df.n
+df = rbindlist(list(df.p, df.n, df.ec), use.names = TRUE)
 
 # Volume correction
 correct.volume(df)
@@ -207,7 +222,8 @@ df = df[, .(Volume = sum(Volume),
             Form, Package, Storage, PromoPack, 
             Region, Channel, Ynb, Mnb)]
 
-extrapolate(df)
+# extrapolate(df)
+extrapolate2(df, df.ss)
 
 add.price.segments(df)
 
@@ -316,6 +332,8 @@ if (price.check == FALSE){
 
 add.acidified(df)
 
+df = df[order(Ynb, Mnb, SKU, Channel, Region)]
+
 df = df[, .(SKU, Brand, SubBrand, Organic, CSS, Items.in.pack, Size,
             Age, Scent, Scent2, ScentType, Acidified, Protein, Flavoured, Company,
             PS0, PS2, PS3, PS, PSV,
@@ -324,7 +342,7 @@ df = df[, .(SKU, Brand, SubBrand, Organic, CSS, Items.in.pack, Size,
             Volume, Value, EC, AC, VolumeC, ValueC)]
 
 fwrite(df,
-       "/home/serhii/Documents/Work/Nutricia/Data/202101/df.csv",
+       "/home/serhii/Documents/Work/Nutricia/Data/202106/df.csv",
        row.names = FALSE)
 
 fwrite(df[, .(SKU, Brand, SubBrand, Size,
@@ -332,38 +350,11 @@ fwrite(df[, .(SKU, Brand, SubBrand, Size,
               PS0, PS2, PS3, PS, 
               Form, Package, PromoPack, PriceSegment,
               Region, Channel, Ynb, Mnb, 
-              Volume, Value, EC, AC, VolumeC, ValueC)],
-       "/home/serhii/Documents/Work/Nutricia/Data/202101/df.pivot.csv",
+              Volume, Value, EC, VolumeC, ValueC)],
+       "/home/serhii/Documents/Work/Nutricia/Data/202106/df.pivot.csv",
        row.names = FALSE)
 
 
 fwrite(df[Ynb >= 2020], 
-       "/home/serhii/Documents/Work/Nutricia/Data/202101/df.short.csv", 
+       "/home/serhii/Documents/Work/Nutricia/Data/202106/df.short.csv", 
        row.names = FALSE)
-
-fwrite(df[, .(SKU, Brand, SubBrand, Size,
-              Age, Scent, Scent2, ScentType, Acidified, Company,
-              PS0, PS2, PS3, PS,
-              Form, Package, PromoPack, PriceSegment,
-              Region, Channel, Ynb, Mnb,
-              Volume, Value)],
-       "/home/serhii/Documents/Work/Nutricia/Data/eCommerce/df.ecom.csv",
-       row.names = FALSE)
-
-
-# Price check
-# df[, Price := Value/Volume]
-# sd/(mean*sqrt(n))
-
-
-# EC
-df.ec[df.ec.op, 
-      on = c("SKU2", "Region.nielsen", "Ynb", "Mnb"), 
-      OP := i.OP]
-df.ec[is.na(OP), OP := 1]
-df.ec[, Volume := Volume/OP]
-
-df = fread("/home/serhii/Documents/Temp/a2_important.csv")
-df[df.ec, on = c("SKU2", "Ynb", "Mnb", "Volume","Value"), 
-   region.nielsen := i.Region.nielsen]
-write.csv(df, "/home/serhii/Documents/Temp/a4.csv", row.names = F)

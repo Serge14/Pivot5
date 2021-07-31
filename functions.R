@@ -1063,15 +1063,17 @@ check.attributes = function(df) {
     "Cereals",
     "Chocolate",
     "Corn",
+    "Curry",
+    "Duck",
     "Fennel",
     "Forest Fruits",
     "Fruits",
     "Fruits-Ginger",
-    # "Lentil",
+    "Lentil",
     "Mokko",
     "Oat",
     "Orange",
-    # "Parsnip",
+    "Parsnip",
     "Raspberry",
     "Red Fruits",
     "Rice",
@@ -1300,7 +1302,7 @@ raw.data.processing = function(df) {
   
   if (weekly.data.all == weekly.data.any & weekly.data.all == TRUE){
     weekly.data = TRUE  
-  }
+  } else {weekly.data = FALSE}
   
   check = columns.check & sales.columns.check
   
@@ -1569,14 +1571,14 @@ append.new.data = function(df.new.data,
 
 check.historical.data = function(df) {
   
-  # print(df[, .N, by = .(Ynb, Mnb)])
+  periods = c("Ynb", names(df)[stri_detect_regex(names(df), "[MW]nb")])
   
   if (any(stri_detect_fixed(tolower(names(df)), "volume"))) {
-    print(df[, .(.N, Volume = sum(Volume), Value = sum(Value)), 
-             by = .(Ynb, Mnb)])
+    print(tail(df[, .(.N, Volume = sum(Volume), Value = sum(Value)), 
+             by = periods]), 25)
   } else {
-    print(df[, .(.N, Items = sum(Items), Value = sum(Value)), 
-             by = .(Ynb, Mnb)])
+    print(tail(df[, .(.N, Items = sum(Items), Value = sum(Value)), 
+             by = periods]), 25)
     
   }
 }
@@ -1638,4 +1640,294 @@ check.brand.price = function(df, Year = NULL, Month = NULL){
        Mnb == Month & 
        (index < 0.8 | index > 1.2)])
   
+}
+
+prepare.for.name.extraction = function(){
+  
+  df.matrix[Items.in.pack == 1,
+            SKU := paste(Brand, SubBrand, Size, Age, Scent, PS, Form, Package, PromoPack)]
+  df.matrix[Items.in.pack != 1,
+            SKU := paste0(Brand, " ", SubBrand, " ", Items.in.pack, "*", Size, 
+                          " ", Age, " ", Scent, " ", PS, " ", Form, " ", Package, 
+                          " ", PromoPack)]
+  
+  df.sku.nielsen[df.matrix, on = "ID", SKU3 := i.SKU]
+  df.sku.proxima[df.matrix, on = "ID", SKU3 := i.SKU]
+  
+}
+
+get.nielsen.name = function(sku.name) {
+  if (!("SKU3" %in% names(df.sku.nielsen))) {
+    prepare.for.name.extraction()
+    
+  }
+  
+  return(df.sku.nielsen[SKU3 == sku.name, SKU2])
+}
+
+get.proxima.name = function(sku.name) {
+  if (!("SKU3" %in% names(df.sku.proxima))) {
+    prepare.for.name.extraction()
+  }
+  
+  return(df.sku.proxima[SKU3 == sku.name, .(ID, SKU2, ID.morion)])
+  
+}
+
+rolling.sum <- function(x, n = 3) {
+  (cs <- cumsum(x)) - c(rep(0, n), cs[1:(length(x)-n)])
+}
+
+
+### Secondary sales 2020+
+
+df.ss = fread("/home/serhii/Documents/Work/Nutricia/Data/202102/secondary.sales.csv",
+              header = TRUE, check.names = TRUE)
+
+prepare.secondary.sales = function(df.ss.main, df.ss.ps, df.ss){
+  
+  # Main secondary sales
+  df.ss.main[dict.months, on = c("MonthD" = "month.name"), Mnb := i.Mnb]
+  df.ss.main[dict.channel, on = c("By.Channel2" = "channel.nutricia"), 
+        Channel := i.Channel]
+  df.ss.main = df.ss.main[!is.na(Channel)]
+  
+  
+  # Add segments to main secondary sales
+  
+  df.ss.main[stri_detect_fixed(tolower(Brand.Category), "milks"),
+        Segment := "IMF"]
+  df.ss.main[Stage %in% c("IF", "FO", "GUM", "IMF"),
+        Segment := "IMF"]
+  df.ss.main[Stage %in% c("Specials"),
+        Segment := "Specials"]
+  df.ss.main[stri_detect_fixed(tolower(Brand.Category), "cereals"),
+        Segment := "Instant Cereals"]
+  df.ss.main[stri_detect_fixed(tolower(Brand.Category), "biscuits"),
+        Segment := "Cereal Biscuits"]
+  df.ss.main[stri_detect_fixed(tolower(Brand.Category), "puree"),
+        Segment := "Puree"]
+  # df.ss.main[stri_detect_fixed(tolower(Brand.Category), "pasta"),
+  #       Segment := "Pasta"]
+  df.ss.main[stri_detect_fixed(tolower(Brand.Category), "pasta"),
+        Segment := "Puree"]
+  
+  names(df.ss.main)[names(df.ss.main) == "YearD"] = "Ynb"
+  
+  df.ss.main = df.ss.main[!is.na(Segment), .(Volume = sum(Total)), 
+                by = .(Ynb, Mnb, Channel, Segment)]
+  
+  #df.ss[Segment == "IMF", 
+  #      Volume := Volume - df.ss[Segment == "Specials"][.SD, .(Volume), 
+  #                                             on = c("Ynb", "Mnb", "Channel")]]
+  
+  df.ss.main[Segment == "IMF", Segment := "Base"]
+  
+  # Main part is ready, DC & HA will be processed
+  
+  ## DC & HA
+  names(df.ss.ps)[names(df.ss.ps) == "YearD"] = "Ynb"
+  names(df.ss.ps)[names(df.ss.ps) == "PS"] = "Segment"
+  names(df.ss.ps)[names(df.ss.ps) == "Total"] = "Volume"
+  
+  df.ss.ps[Segment == "DC", Segment := "Digestive Comfort"]
+  df.ss.ps[Segment == "HA", Segment := "Hypoallergenic"]
+  
+  df.ss.ps[dict.months, on = c("MonthD" = "month.name"), Mnb := i.Mnb]
+  df.ss.ps[dict.channel, on = c("By.Channel2" = "channel.nutricia"), 
+         Channel := i.Channel]
+  df.ss.ps = df.ss.ps[!is.na(Channel)]
+  
+  # Combine main with DC & HA
+  df.ss.main = rbindlist(list(df.ss.main, 
+                         df.ss.ps[, .(Ynb, Mnb, Channel, Segment, Volume)]),
+                    use.names = TRUE)
+  
+  df.ss.main = df.ss.main[, .(Volume = sum(Volume)),
+                          by = .(Ynb, Mnb, Channel, Segment)]
+  
+  df.ss.main = df.ss.main[order(Ynb, Mnb, Channel, Segment)]
+  
+  df.ss.main[, Volume2 := (Volume[Segment == "Specials"] - 
+                        Volume[Segment == "Digestive Comfort"] - 
+                        Volume[Segment == "Hypoallergenic"]), 
+        by = .(Ynb, Mnb, Channel)]
+  df.ss.main[Segment == "Specials", Volume := Volume2][, Volume2 := NULL]
+  
+  # Checks, if historical data differs by 1% the notification is given
+  # df.ss = df.ss[Ynb >= 2020]
+  df.ss[df.ss.main, 
+        on = c("Ynb", "Mnb", "Channel", "Segment"),
+        Volume2 := i.Volume]
+  
+  df.ss[, Ratio := Volume2/Volume]
+  
+  if (!(min(df.ss$Ratio > 0.99, na.rm = TRUE) & 
+        max(df.ss$Ratio, na.rm = TRUE) < 1.01)){
+    print("New data differ from the previous!")
+    
+  }
+  
+  df.ss[, Ratio := NULL]
+  
+  df.ss.main[, Exist := FALSE]
+  df.ss.main[df.ss, on = .(Ynb, Mnb), Exist := TRUE]
+  
+  print("These rows are going to be added to the master secondary sales file:")
+  print(df.ss.main[Exist == FALSE])
+  
+  df.ss = rbindlist(list(df.ss[, .(Ynb, Mnb, Channel, Segment, Volume)], 
+                         df.ss.main[Exist == FALSE,
+                                           .(Ynb, Mnb, Channel, Segment, Volume)]))
+  df.ss = df.ss[order(Ynb, Mnb, Channel, Segment)]
+  
+  rm(df.ss.main)
+  rm(df.ss.ps)
+  
+  return(df.ss)
+  
+}
+
+generate.ecom.pivot = function(df.ec, path.to.1st.period){
+  
+  # Preparation
+  df.ec[, OPMP := 1]
+  df.ec[dictOPMP.ec, 
+        on = c("SKU2", "Ynb", "Wnb", "Region.nielsen"), 
+        OPMP := i.opmp]
+  
+  df.ec[, Volume := Volume * OPMP]
+  
+  df.ec[dictWeeks, on = "Wnb", Mnb := i.Mnb]
+  
+  df.temp = df.ec[, .(RD = uniqueN(Wnb)*7), by = .(Ynb, Mnb)]
+  df.temp[dictCalendar, on = c("Ynb", "Mnb"), Days := i.Days]
+  df.temp[, CBD := Days/RD]
+  
+  df.ec[df.sku.nielsen, on = "SKU2", ID := i.ID]
+  
+  df.ec[is.na(ID) | ID == "", .N]
+  df.ec = df.ec[ID > 0]
+  
+  df.ec = df.ec[, .(Volume = sum(Volume),
+                    Value = sum(Value)),
+                by = .(ID, Ynb, Mnb, Region.nielsen)]
+  
+  # Correction by days
+  df.ec[df.temp, on = c("Ynb", "Mnb"), CBD := i.CBD]
+  df.ec[, `:=`(Volume = Volume*CBD,
+               Value = Value*CBD)][, CBD := NULL]
+  
+  df.ec = df.ec[df.matrix, on = "ID",
+                `:=`(Brand = i.Brand,
+                     SubBrand = i.SubBrand,
+                     Organic = i.Organic,
+                     CSS = i.CSS,
+                     Items.in.pack = i.Items.in.pack,
+                     Size = i.Size,
+                     Age = i.Age,
+                     Scent = i.Scent,
+                     Protein = i.Protein,
+                     Flavoured = i.Flavoured,
+                     Company = i.Company,
+                     PS0 = i.PS0,
+                     PS2 = i.PS2,
+                     PS3 = i.PS3,
+                     PS = i.PS,
+                     PSV = i.PSV,
+                     Form = i.Form,
+                     Package = i.Package,
+                     Storage = i.Storage,
+                     PromoPack  = i.PromoPack)]
+  
+  # df.temp = raw.data.processing(df.temp)
+  df.temp = fread(path.to.1st.period)
+  
+  df.temp[df.sku.nielsen, on = "SKU2", ID := i.ID]
+  
+  df.temp[is.na(ID) | ID == "", .N]
+  df.temp = df.temp[ID > 0]
+  
+  df.temp = df.temp[, .(Volume = sum(Volume),
+                        Value = sum(Value)),
+                    by = .(ID, Ynb, Mnb, Region.nielsen)]
+  
+  df.temp = df.temp[df.matrix, on = "ID",
+                    `:=`(Brand = i.Brand,
+                         SubBrand = i.SubBrand,
+                         Organic = i.Organic,
+                         CSS = i.CSS,
+                         Items.in.pack = i.Items.in.pack,
+                         Size = i.Size,
+                         Age = i.Age,
+                         Scent = i.Scent,
+                         Protein = i.Protein,
+                         Flavoured = i.Flavoured,
+                         Company = i.Company,
+                         PS0 = i.PS0,
+                         PS2 = i.PS2,
+                         PS3 = i.PS3,
+                         PS = i.PS,
+                         PSV = i.PSV,
+                         Form = i.Form,
+                         Package = i.Package,
+                         Storage = i.Storage,
+                         PromoPack  = i.PromoPack)]
+  
+  all(names(df.ec) == names(df.temp))
+  
+  df.ec = rbindlist(list(df.temp, df.ec))
+  
+  names(df.ec)[names(df.ec) == "Region.nielsen"] = "Region"
+  
+  return(df.ec)
+  
+}
+
+
+extrapolate2 = function(df, df.ss){
+  
+  df[, Segment := PS3]
+  df[PS %in% c("Digestive Comfort", "Hypoallergenic"), 
+     Segment := PS]
+  df[PS3 %in% c("Fruits", "Savoury Meal"), Segment := "Puree"]
+  df[PS3 %in% c("Dairy/desserts", "Drinks",
+                "Liquid Cereals",
+                "RTE Cereals"), Segment := "Other"]
+  df[PS3 == "Base Plus", Segment := "Base"]
+  df[PS0 == "AMN", Segment := "Other"]
+  
+  df.ss[
+    df[Company == "Nutricia",
+       sum(Volume),
+       by = .(Segment, Channel, Ynb, Mnb)],
+    on = c("Ynb", "Mnb", "Segment", "Channel"),
+    Volume.est := i.V1]
+  
+  df.ss = df.ss[order(Channel, Segment, Ynb, Mnb)]
+  
+  df.ss[,
+        SS.r3 := df.ss[, .(rolling.sum(Volume)),
+                       by = .(Channel, Segment)][, V1]]
+  df.ss[,
+        Volume.r3 := df.ss[, .(rolling.sum(Volume.est)),
+                           by = .(Channel, Segment)][, V1]]      
+  
+  df.ss[, ec := SS.r3/Volume.r3]
+  
+  df[, EC := 1]
+  df[, AC := 1]
+  
+  df[df.ss, on = c("Ynb", "Mnb", "Segment", "Channel"),
+     EC := i.ec]
+  
+  df[EC == 1,
+     EC := df.ss[, mean(ec), 
+                 by = .(Ynb, Mnb, Channel)][.SD, .(V1), 
+                                            on = c("Channel", "Ynb", "Mnb")]]
+  
+  print(paste("Number of rows without coefficient:", df[EC == 1, .N]))
+  
+  df[, `:=`(VolumeC = Volume*EC,
+            ValueC = Value*EC)]
 }
